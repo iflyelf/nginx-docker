@@ -9,7 +9,7 @@ services:
     # 指定容器名称
     container_name: nginx
     # 指定为镜像名称或镜像ID
-    image: danxiaonuo/nginx:latest
+    image: iflyelf/nginx:latest
     # 覆盖容器启动后默认执行的命令
     # command: /sbin/init
     # 允许容器中运行一些特权命令
