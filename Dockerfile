@@ -401,7 +401,11 @@ RUN set -eux && \
     ./build.sh && \
     ./configure && \
     make -j$(($(nproc)+1)) && \
-    make install && \
+    # 跳过 make install (它会跑 go test -race, 在 arm64 QEMU 下因 ThreadSanitizer VMA 限制失败)
+    # 手动安装库文件和头文件 (等效 install-data-local 但不依赖 check)
+    install -d /usr/local/lib /usr/local/include/coraza && \
+    install -m 644 libcoraza.a libcoraza.so /usr/local/lib/ && \
+    install -m 644 coraza/coraza.h /usr/local/include/coraza/ && \
     ldconfig
 
 # ***** 安装NGINX *****
