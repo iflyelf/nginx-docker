@@ -416,7 +416,7 @@ RUN set -eux && \
     ./configure ${NGINX_BUILD_CONFIG} \
     --add-module=${DOWNLOAD_SRC}/headers-more-nginx-module-${OPENRESTY_HEADERS_VERSION} \
     #--add-module=${DOWNLOAD_SRC}/stream-lua-nginx-module-${OPENRESTY_STREAMLUA_VERSION} \
-    # --add-module=${DOWNLOAD_SRC}/nginx-sticky-module-ng-${NGINX_STICKY_MODULE_NG_VERSION} \
+    #--add-module=${DOWNLOAD_SRC}/nginx-sticky-module-ng-${NGINX_STICKY_MODULE_NG_VERSION} \
     --with-cc-opt='-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fPIC' \
     --with-ld-opt='-Wl,-rpath,$LUAJIT_LIB -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie' \
     || ./configure ${NGINX_BUILD_CONFIG} \
@@ -584,12 +584,12 @@ curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
    npm install -g wrangler && \
    rm -rf /var/lib/apt/lists/* /tmp/*
 
-# ***** 升级 python3 版本 *****
+# ***** 安装 python3 版本 *****
 RUN set -eux && \
     python3 -m pip config set global.break-system-packages true && \
     pip3 config set global.index-url http://mirrors.aliyun.com/pypi/simple/ && \
     pip3 config set install.trusted-host mirrors.aliyun.com && \
-    python3 -m pip install --no-cache-dir --upgrade setuptools wheel cython && \
+    python3 -m pip install --no-cache-dir --ignore-installed setuptools wheel cython && \
     python3 -m pip install --no-cache-dir pycryptodome lxml cython beautifulsoup4 requests && \
     rm -rf /tmp/* /var/lib/apt/lists/*
 
