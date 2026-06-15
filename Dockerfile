@@ -447,6 +447,10 @@ FROM base
 LABEL org.opencontainers.image.authors="iflyelf" \
       org.opencontainers.image.vendor="iflyelf"
 
+# buildx 自动注入的目标架构 (amd64/arm64/arm/386), 用于按架构下载对应 Go 包
+ARG TARGETARCH
+ARG TARGETVARIANT
+
 # 时区设置
 ARG TZ=Asia/Shanghai
 ENV TZ=$TZ
