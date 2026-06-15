@@ -406,11 +406,18 @@ RUN set -eux && \
 
 # ***** 安装NGINX *****
 RUN set -eux && \
-    # 修复 nginx-sticky-module-ng 1.2.6 与 nginx 1.23.0+ 的兼容性:
-    # nginx 1.23.0 把 r->headers_in.cookies (ngx_array_t) 改为 r->headers_in.cookie (ngx_table_elt_t *)
-    # 同时 ngx_http_parse_multi_header_lines() 增加首个参数 r
-    sed -i 's|ngx_http_parse_multi_header_lines(&r->headers_in\.cookies, |ngx_http_parse_multi_header_lines(r, r->headers_in.cookie, |' \
+    # 修复 nginx-sticky-module-ng 1.2.6 的系统性老化(撞上 nginx 1.23+ 与 OpenSSL 3.x 两代 API 变更):
+    # 1) nginx 1.23.0: r->headers_in.cookies(ngx_array_t) 改为 r->headers_in.cookie(ngx_table_elt_t *),
+    #    且 ngx_http_parse_multi_header_lines() 增加首参 r、返回值由 ngx_int_t 改为 ngx_table_elt_t *
+    #    故调用方式与返回值比较(NGX_DECLINED -> NULL)都要改
+    # 2) OpenSSL 3.x 不再暴露 MD5_DIGEST_LENGTH(=16)/MD5_CBLOCK(=64) 宏, 用 RFC1321 固定值替换
+    sed -i \
+        -e 's|ngx_http_parse_multi_header_lines(&r->headers_in\.cookies, \(&iphp->sticky_conf->cookie_name, &route)\) != NGX_DECLINED|ngx_http_parse_multi_header_lines(r, r->headers_in.cookie, \1 != NULL|' \
         ${DOWNLOAD_SRC}/nginx-sticky-module-ng-${NGINX_STICKY_MODULE_NG_VERSION}/ngx_http_sticky_module.c && \
+    sed -i \
+        -e 's|MD5_DIGEST_LENGTH|16|g' \
+        -e 's|MD5_CBLOCK|64|g' \
+        ${DOWNLOAD_SRC}/nginx-sticky-module-ng-${NGINX_STICKY_MODULE_NG_VERSION}/ngx_http_sticky_misc.c && \
     cd ${DOWNLOAD_SRC}/nginx-${NGINX_VERSION} && \
     sed -i '14s#nginx#xiaonuo_waf#' src/core/nginx.h && \
     sed -i '1,/NGINX_VAR/{s/.*NGINX_VAR.*/#define NGINX_VAR          "XIAONUO_WAF"/}' src/core/nginx.h && \
