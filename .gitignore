@@ -1,8 +1,2 @@
-# SSL 私钥与证书（禁止上传）
-conf/nginx/ssl/session_ticket.key
-conf/nginx/ssl/**/*.key
-conf/nginx/ssl/**/*.pem
-conf/nginx/ssl/**/*.conf
-
 # 本地缓存
 *.log
