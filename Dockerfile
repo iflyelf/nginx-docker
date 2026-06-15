@@ -224,6 +224,7 @@ ENV NGINX_BUILD_CONFIG=$NGINX_BUILD_CONFIG
 # 构建安装依赖
 ARG BUILD_DEPS="\
     build-essential \
+    ca-certificates \
     curl \
     wget \
     git \
