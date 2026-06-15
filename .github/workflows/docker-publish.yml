@@ -79,7 +79,7 @@ jobs:
         file: ./Dockerfile
         platforms: linux/amd64,linux/arm/v7,linux/arm64,linux/386
         push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/nginx:${{ matrix.DOCKER_TAG }}
+        tags: ${{ secrets.DOCKER_USERNAME }}/nginx:${{ matrix.DOCKER_TAG }}
 
     - name: 删除旧的GitHub-workflow
       uses: Mattraks/delete-workflow-runs@main
