@@ -81,19 +81,6 @@ jobs:
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/nginx:${{ matrix.DOCKER_TAG }}
 
-    - name: 上传至阿里云
-      id: buildAndPushImage
-      uses: risfeng/docker-image-build-push-action@v1.0
-      with:
-        registry_url: 'registry.cn-hongkong.aliyuncs.com'
-        namespaces: 'danxiaonuo'
-        repository_name: 'nginx'
-        user_name: ${{ secrets.ALIYUN_USERNAME }}
-        password: ${{ secrets.ALIYUN_PASSWORD }}
-        image_version: ${{ matrix.DOCKER_TAG }}
-        docker_file: '.'
-
-
     - name: 删除旧的GitHub-workflow
       uses: Mattraks/delete-workflow-runs@main
       with:
