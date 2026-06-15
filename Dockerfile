@@ -408,6 +408,11 @@ RUN set -eux && \
 
 # ***** 安装NGINX *****
 RUN set -eux && \
+    # 修复 nginx-sticky-module-ng 1.2.6 与 nginx 1.23.0+ 的兼容性:
+    # nginx 1.23.0 把 r->headers_in.cookies (ngx_array_t) 改为 r->headers_in.cookie (ngx_table_elt_t *)
+    # 同时 ngx_http_parse_multi_header_lines() 增加首个参数 r
+    sed -i 's|ngx_http_parse_multi_header_lines(&r->headers_in\.cookies, |ngx_http_parse_multi_header_lines(r, r->headers_in.cookie, |' \
+        ${DOWNLOAD_SRC}/nginx-sticky-module-ng-${NGINX_STICKY_MODULE_NG_VERSION}/ngx_http_sticky_module.c && \
     cd ${DOWNLOAD_SRC}/nginx-${NGINX_VERSION} && \
     sed -i '14s#nginx#xiaonuo_waf#' src/core/nginx.h && \
     sed -i '1,/NGINX_VAR/{s/.*NGINX_VAR.*/#define NGINX_VAR          "XIAONUO_WAF"/}' src/core/nginx.h && \
@@ -415,8 +420,8 @@ RUN set -eux && \
     sed -i 's#<hr><center>nginx</center>#<hr><center>xiaonuo</center>#g' src/http/ngx_http_special_response.c && \
     ./configure ${NGINX_BUILD_CONFIG} \
     --add-module=${DOWNLOAD_SRC}/headers-more-nginx-module-${OPENRESTY_HEADERS_VERSION} \
+    --add-module=${DOWNLOAD_SRC}/nginx-sticky-module-ng-${NGINX_STICKY_MODULE_NG_VERSION} \
     #--add-module=${DOWNLOAD_SRC}/stream-lua-nginx-module-${OPENRESTY_STREAMLUA_VERSION} \
-    #--add-module=${DOWNLOAD_SRC}/nginx-sticky-module-ng-${NGINX_STICKY_MODULE_NG_VERSION} \
     --with-cc-opt='-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fPIC' \
     --with-ld-opt='-Wl,-rpath,$LUAJIT_LIB -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie' \
     || ./configure ${NGINX_BUILD_CONFIG} \
