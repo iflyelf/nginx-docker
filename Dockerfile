@@ -162,7 +162,8 @@ ENV PROMETHEUS_VERSION=$PROMETHEUS_VERSION
 
 # stream-lua-nginx-module
 # https://github.com/openresty/stream-lua-nginx-module
-ARG OPENRESTY_STREAMLUA_VERSION=0.0.17
+# 0.0.19rc4 与 lua-nginx-module 0.10.31 配套(OpenResty master 捆绑组合)
+ARG OPENRESTY_STREAMLUA_VERSION=0.0.19rc4
 ENV OPENRESTY_STREAMLUA_VERSION=$OPENRESTY_STREAMLUA_VERSION
 
 # NGINX
@@ -191,7 +192,6 @@ ARG NGINX_BUILD_CONFIG="\
     --user=nginx \
     --group=nginx \
     --with-stream \
-    --with-stream=dynamic \
     --with-stream_ssl_module \
     --with-stream_ssl_preread_module \
     --with-stream_realip_module \
@@ -209,8 +209,6 @@ ARG NGINX_BUILD_CONFIG="\
     --with-http_stub_status_module \
     --with-http_auth_request_module \
     --with-threads \
-    --with-stream \
-    --with-stream_ssl_module \
     --with-http_slice_module \
     --with-mail \
     --with-mail_ssl_module \
@@ -421,7 +419,7 @@ RUN set -eux && \
     ./configure ${NGINX_BUILD_CONFIG} \
     --add-module=${DOWNLOAD_SRC}/headers-more-nginx-module-${OPENRESTY_HEADERS_VERSION} \
     --add-module=${DOWNLOAD_SRC}/nginx-sticky-module-ng-${NGINX_STICKY_MODULE_NG_VERSION} \
-    #--add-module=${DOWNLOAD_SRC}/stream-lua-nginx-module-${OPENRESTY_STREAMLUA_VERSION} \
+    --add-module=${DOWNLOAD_SRC}/stream-lua-nginx-module-${OPENRESTY_STREAMLUA_VERSION} \
     --with-cc-opt='-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fPIC' \
     --with-ld-opt='-Wl,-rpath,$LUAJIT_LIB -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie' \
     || ./configure ${NGINX_BUILD_CONFIG} \
