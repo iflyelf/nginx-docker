@@ -95,7 +95,8 @@ ENV OWASP_CRS_VERSION=$OWASP_CRS_VERSION
 
 # lua-resty-core
 # https://github.com/openresty/lua-resty-core
-ARG LUA_RESTY_CORE_VERSION=0.1.32
+# 0.1.34rc3 与 lua-nginx-module 0.10.31 配套(OpenResty master 捆绑组合)
+ARG LUA_RESTY_CORE_VERSION=0.1.34rc3
 ENV LUA_RESTY_CORE_VERSION=$LUA_RESTY_CORE_VERSION
 ARG LUA_LIB_DIR=/usr/local/share/lua/5.1
 ENV LUA_LIB_DIR=$LUA_LIB_DIR
