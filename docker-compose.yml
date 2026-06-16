@@ -38,7 +38,10 @@ services:
       - ./conf/nginx/php.conf:/data/nginx/conf/php.conf:rw,cached
       - ./conf/nginx/websocket.conf:/data/nginx/conf/websocket.conf:rw,cached
       - ./conf/nginx/waf.conf:/data/nginx/conf/waf.conf:rw,cached
-      - ./conf/nginx/waf:/data/nginx/conf/waf:rw,cached
+      # 仅挂载自定义 WAF 配置文件, 不挂载整个 waf 目录
+      # (避免覆盖镜像内的 owasp-crs/ 规则集和 crs-setup.conf)
+      - ./conf/nginx/waf/coraza.conf:/data/nginx/conf/waf/coraza.conf:rw,cached
+      - ./conf/nginx/waf/coraza-recommended.conf:/data/nginx/conf/waf/coraza-recommended.conf:rw,cached
       # 日志目录
       - ./logs/nginx:/data/nginx/logs:delegated
       # 同步宿主机时区与时间
