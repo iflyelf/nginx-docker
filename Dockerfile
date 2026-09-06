@@ -37,7 +37,7 @@ ARG DOWNLOAD_SRC=/tmp/src
 ENV DOWNLOAD_SRC=$DOWNLOAD_SRC
 
 # GO环境变量
-ARG GO_VERSION=1.26.4
+ARG GO_VERSION=1.27.1
 ENV GO_VERSION=$GO_VERSION
 ARG GOROOT=/opt/go
 ENV GOROOT=$GOROOT
@@ -80,17 +80,17 @@ ENV NGINX_HTTP_CONCAT_VERSION=$NGINX_HTTP_CONCAT_VERSION
 
 # libcoraza (OWASP Coraza WAF 的 C 库, ModSecurity 继任者)
 # https://github.com/corazawaf/libcoraza
-ARG LIBCORAZA_VERSION=1.6.0
+ARG LIBCORAZA_VERSION=1.7.0
 ENV LIBCORAZA_VERSION=$LIBCORAZA_VERSION
 
 # coraza-nginx (libcoraza 的 nginx 连接器模块)
 # https://github.com/corazawaf/coraza-nginx
-ARG CORAZA_NGINX_VERSION=0.11.1
+ARG CORAZA_NGINX_VERSION=0.21.0
 ENV CORAZA_NGINX_VERSION=$CORAZA_NGINX_VERSION
 
 # OWASP Core Rule Set (CRS) 规则集
 # https://github.com/coreruleset/coreruleset
-ARG OWASP_CRS_VERSION=4.27.0
+ARG OWASP_CRS_VERSION=4.29.0
 ENV OWASP_CRS_VERSION=$OWASP_CRS_VERSION
 
 # lua-resty-core
@@ -169,8 +169,14 @@ ENV OPENRESTY_STREAMLUA_VERSION=$OPENRESTY_STREAMLUA_VERSION
 
 # NGINX
 # https://github.com/nginx/nginx
-ARG NGINX_VERSION=1.31.1
+ARG NGINX_VERSION=1.31.5
 ENV NGINX_VERSION=$NGINX_VERSION
+
+# QuicTLS OpenSSL (带 QUIC 支持的 OpenSSL, HTTP/3 必需)
+# https://github.com/quictls/openssl
+ARG OPENSSL_QUIC_VERSION=3.3.0-quic1
+ENV OPENSSL_QUIC_VERSION=$OPENSSL_QUIC_VERSION
+
 ARG NGINX_BUILD_CONFIG="\
     --prefix=${NGINX_DIR} \
     --sbin-path=${NGINX_DIR}/sbin/nginx \
@@ -215,6 +221,7 @@ ARG NGINX_BUILD_CONFIG="\
     --with-mail_ssl_module \
     --with-file-aio \
     --with-http_v2_module \
+    --with-http_v3_module \
     --with-http_image_filter_module \
     --with-ipv6 \
 "
@@ -262,11 +269,18 @@ RUN set -eux && \
    # 解决证书认证失败问题
    touch /etc/apt/apt.conf.d/99verify-peer.conf && echo >>/etc/apt/apt.conf.d/99verify-peer.conf "Acquire { https::Verify-Peer false }" && \
    # 更新系统软件
-   DEBIAN_FRONTEND=noninteractive apt-get update -qqy && apt-get upgrade -qqy && \
+   DEBIAN_FRONTEND=noninteractive apt update -qqy && apt upgrade -qqy && \
    # 安装依赖包
-   DEBIAN_FRONTEND=noninteractive apt-get install -qqy --no-install-recommends $BUILD_DEPS $NGINX_BUILD_DEPS --option=Dpkg::Options::=--force-confdef && \
-   DEBIAN_FRONTEND=noninteractive apt-get -qqy --no-install-recommends autoremove --purge && \
-   DEBIAN_FRONTEND=noninteractive apt-get -qqy --no-install-recommends autoclean && \
+   DEBIAN_FRONTEND=noninteractive apt install -qqy $BUILD_DEPS $NGINX_BUILD_DEPS --option=Dpkg::Options::=--force-confdef && \
+   # 验证依赖包是否真正安装成功
+   for pkg in $BUILD_DEPS $NGINX_BUILD_DEPS; do \
+       if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then \
+           echo "ERROR: 依赖包未成功安装: $pkg" >&2 && exit 1; \
+       fi; \
+   done && \
+   echo "所有依赖包验证通过" && \
+   DEBIAN_FRONTEND=noninteractive apt -qqy autoremove --purge && \
+   DEBIAN_FRONTEND=noninteractive apt -qqy autoclean && \
    rm -rf /var/lib/apt/lists/* && \
    # 更新时区
    ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime && \
@@ -311,6 +325,8 @@ RUN set -eux && \
 RUN set -eux && \
     wget --no-check-certificate http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
     -O ${DOWNLOAD_SRC}/nginx.tar.gz && \
+    wget --no-check-certificate https://github.com/quictls/openssl/archive/refs/heads/OpenSSL_${OPENSSL_QUIC_VERSION}.tar.gz \
+    -O ${DOWNLOAD_SRC}/openssl-quic.tar.gz && \
     wget --no-check-certificate https://github.com/openresty/luajit2/archive/v${LUAJIT_VERSION}.tar.gz \
     -O ${DOWNLOAD_SRC}/luajit2.tar.gz && \
     wget --no-check-certificate https://github.com/simpl/ngx_devel_kit/archive/v${NGX_DEVEL_KIT_VERSION}.tar.gz \
@@ -432,9 +448,11 @@ RUN set -eux && \
     --add-module=${DOWNLOAD_SRC}/headers-more-nginx-module-${OPENRESTY_HEADERS_VERSION} \
     --add-module=${DOWNLOAD_SRC}/nginx-sticky-module-ng-${NGINX_STICKY_MODULE_NG_VERSION} \
     --add-module=${DOWNLOAD_SRC}/stream-lua-nginx-module-${OPENRESTY_STREAMLUA_VERSION} \
+    --with-openssl=${DOWNLOAD_SRC}/openssl-OpenSSL_${OPENSSL_QUIC_VERSION} \
     --with-cc-opt='-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fPIC' \
     --with-ld-opt='-Wl,-rpath,$LUAJIT_LIB -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie' \
     || ./configure ${NGINX_BUILD_CONFIG} \
+    --with-openssl=${DOWNLOAD_SRC}/openssl-OpenSSL_${OPENSSL_QUIC_VERSION} \
     --with-cc-opt='-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fPIC' \
     --with-ld-opt='-Wl,-rpath,$LUAJIT_LIB -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie' && \
     make -j$(($(nproc)+1)) build && \
@@ -469,7 +487,7 @@ ARG LANG=zh_CN.UTF-8
 ENV LANG=$LANG
 
 # GO环境变量
-ARG GO_VERSION=1.26.4
+ARG GO_VERSION=1.27.1
 ENV GO_VERSION=$GO_VERSION
 ARG GOROOT=/opt/go
 ENV GOROOT=$GOROOT
@@ -515,6 +533,7 @@ ARG PKG_DEPS="\
     debsums \
     locales \
     iptables \
+    nftables \
     python3 \
     python3-dev \
     python3-pip \
@@ -540,11 +559,18 @@ RUN set -eux && \
    # 解决证书认证失败问题
    touch /etc/apt/apt.conf.d/99verify-peer.conf && echo >>/etc/apt/apt.conf.d/99verify-peer.conf "Acquire { https::Verify-Peer false }" && \
    # 更新系统软件
-   DEBIAN_FRONTEND=noninteractive apt-get update -qqy && apt-get upgrade -qqy && \
+   DEBIAN_FRONTEND=noninteractive apt update -qqy && apt upgrade -qqy && \
    # 安装依赖包
-   DEBIAN_FRONTEND=noninteractive apt-get install -qqy --no-install-recommends $PKG_DEPS $NGINX_BUILD_DEPS --option=Dpkg::Options::=--force-confdef && \
-   DEBIAN_FRONTEND=noninteractive apt-get -qqy --no-install-recommends autoremove --purge && \
-   DEBIAN_FRONTEND=noninteractive apt-get -qqy --no-install-recommends autoclean && \
+   DEBIAN_FRONTEND=noninteractive apt install -qqy $PKG_DEPS $NGINX_BUILD_DEPS --option=Dpkg::Options::=--force-confdef && \
+   # 验证依赖包是否真正安装成功(逐个检查 dpkg 状态, 缺失则构建失败)
+   for pkg in $PKG_DEPS $NGINX_BUILD_DEPS; do \
+       if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then \
+           echo "ERROR: 依赖包未成功安装: $pkg" >&2 && exit 1; \
+       fi; \
+   done && \
+   echo "所有依赖包验证通过" && \
+   DEBIAN_FRONTEND=noninteractive apt -qqy autoremove --purge && \
+   DEBIAN_FRONTEND=noninteractive apt -qqy autoclean && \
    rm -rf /var/lib/apt/lists/* && \
    # 更新时区
    ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime && \
@@ -595,8 +621,8 @@ adduser --quiet --system --disabled-login --ingroup nginx --home /data/nginx --n
 # 使用 n 在构建时获取最新 LTS；若需最新 Current 可改为 n latest
 RUN set -eux && \
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-   DEBIAN_FRONTEND=noninteractive apt-get update -qqy && \
-   DEBIAN_FRONTEND=noninteractive apt-get install -qqy --no-install-recommends nodejs && \
+   DEBIAN_FRONTEND=noninteractive apt update -qqy && \
+   DEBIAN_FRONTEND=noninteractive apt install -qqy nodejs && \
    npm config set registry https://registry.npmmirror.com && \
    npm install -g n && \
    n lts && \
@@ -637,7 +663,7 @@ RUN set -eux && \
 HEALTHCHECK --interval=30s --timeout=3s CMD curl --fail http://localhost/ || exit 1
 
 # ***** 监听端口 *****
-EXPOSE 80 443
+EXPOSE 80 443 443/udp
 
 # ***** 工作目录 *****
 WORKDIR /data/nginx
