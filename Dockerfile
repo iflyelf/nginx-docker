@@ -174,7 +174,7 @@ ENV NGINX_VERSION=$NGINX_VERSION
 
 # QuicTLS OpenSSL (带 QUIC 支持的 OpenSSL, HTTP/3 必需)
 # https://github.com/quictls/openssl
-ARG OPENSSL_QUIC_VERSION=3.3.0-quic1
+ARG OPENSSL_QUIC_VERSION=openssl-3.3.0-quic1
 ENV OPENSSL_QUIC_VERSION=$OPENSSL_QUIC_VERSION
 
 ARG NGINX_BUILD_CONFIG="\
@@ -325,7 +325,7 @@ RUN set -eux && \
 RUN set -eux && \
     wget --no-check-certificate http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
     -O ${DOWNLOAD_SRC}/nginx.tar.gz && \
-    wget --no-check-certificate https://github.com/quictls/openssl/archive/refs/heads/OpenSSL_${OPENSSL_QUIC_VERSION}.tar.gz \
+    wget --no-check-certificate https://github.com/quictls/openssl/archive/refs/tags/${OPENSSL_QUIC_VERSION}.tar.gz \
     -O ${DOWNLOAD_SRC}/openssl-quic.tar.gz && \
     wget --no-check-certificate https://github.com/openresty/luajit2/archive/v${LUAJIT_VERSION}.tar.gz \
     -O ${DOWNLOAD_SRC}/luajit2.tar.gz && \
@@ -448,11 +448,11 @@ RUN set -eux && \
     --add-module=${DOWNLOAD_SRC}/headers-more-nginx-module-${OPENRESTY_HEADERS_VERSION} \
     --add-module=${DOWNLOAD_SRC}/nginx-sticky-module-ng-${NGINX_STICKY_MODULE_NG_VERSION} \
     --add-module=${DOWNLOAD_SRC}/stream-lua-nginx-module-${OPENRESTY_STREAMLUA_VERSION} \
-    --with-openssl=${DOWNLOAD_SRC}/openssl-OpenSSL_${OPENSSL_QUIC_VERSION} \
+    --with-openssl=${DOWNLOAD_SRC}/openssl-${OPENSSL_QUIC_VERSION} \
     --with-cc-opt='-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fPIC' \
     --with-ld-opt='-Wl,-rpath,$LUAJIT_LIB -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie' \
     || ./configure ${NGINX_BUILD_CONFIG} \
-    --with-openssl=${DOWNLOAD_SRC}/openssl-OpenSSL_${OPENSSL_QUIC_VERSION} \
+    --with-openssl=${DOWNLOAD_SRC}/openssl-${OPENSSL_QUIC_VERSION} \
     --with-cc-opt='-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fPIC' \
     --with-ld-opt='-Wl,-rpath,$LUAJIT_LIB -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie' && \
     make -j$(($(nproc)+1)) build && \
