@@ -1,0 +1,164 @@
+#=================================================
+# https://github.com/iflyelf/nginx-docker
+# Lisence: MIT
+# Author: iflyelf
+# Blog: https://www.xiaonuo.live
+#=================================================
+
+name: 更新 nginx 及依赖版本号
+
+# 设置触发条件
+on:
+  # 定时检查(中国时间每天早4点, UTC 前一天20点; 早于镜像构建的5点)
+  schedule:
+    - cron: '0 20 * * *'
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'update nginx & deps version'
+        required: false
+        default: 'manual check'
+
+# 同一分支仅保留最新一次检查
+concurrency:
+  group: update-version-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: 检查并更新版本号
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+
+        # ---------- 稳定版过滤: 排除 rc/beta/alpha/test/dev/preview/snapshot ----------
+        is_stable() {
+          echo "$1" | grep -qivE '(rc|beta|alpha|test|dev|preview|snapshot|nightly|-pre|m[0-9])' 
+        }
+
+        # 语义化版本比较: 若 $1 > $2 返回 0
+        version_gt() {
+          [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]
+        }
+
+        # 取 GitHub 仓库最新“稳定”版本(去掉前缀 v), 失败返回空
+        # 优先用 releases(排除 prerelease/draft), 为空时回退到 tags(仅纯数字 semver)
+        gh_latest_stable() {
+          local repo="$1" out
+          out=$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/${repo}/releases?per_page=50" 2>/dev/null \
+            | jq -r '.[] | select(.prerelease==false and .draft==false) | .tag_name' 2>/dev/null \
+            | sed 's/^v//' \
+            | while read -r t; do is_stable "$t" && echo "$t"; done \
+            | sort -V | tail -1)
+          if [ -z "$out" ]; then
+            out=$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
+              "https://api.github.com/repos/${repo}/tags?per_page=50" 2>/dev/null \
+              | jq -r '.[].name' 2>/dev/null \
+              | sed 's/^v//' \
+              | while read -r t; do is_stable "$t" && echo "$t"; done \
+              | grep -E '^[0-9]+(\.[0-9]+)+$' \
+              | sort -V | tail -1)
+          fi
+          echo "$out"
+        }
+
+        # 取 nginx 官方最新 mainline 稳定版
+        nginx_latest() {
+          curl -fsSL 'https://nginx.org/en/download.html' 2>/dev/null \
+            | grep -oE 'nginx-[0-9]+\.[0-9]+\.[0-9]+' \
+            | sed 's/nginx-//' | sort -V | tail -1
+        }
+
+        DOCKERFILE=Dockerfile
+        CHANGED=0
+        SUMMARY=""
+
+        # 通用更新函数: $1=ARG名 $2=最新版本
+        try_update() {
+          local arg="$1"; local latest="$2"
+          [ -z "$latest" ] && { echo "  [$arg] 获取最新版本失败, 跳过"; return; }
+          local current
+          current=$(grep -oP "ARG ${arg}=\K.*" "$DOCKERFILE" | head -1 || true)
+          [ -z "$current" ] && { echo "  [$arg] Dockerfile 中未找到, 跳过"; return; }
+          if [ "$current" = "$latest" ]; then
+            echo "  [$arg] 已是最新 ($current)"
+          elif version_gt "$latest" "$current"; then
+            echo "  [$arg] 更新: $current => $latest"
+            sed -i "s|^ARG ${arg}=.*|ARG ${arg}=${latest}|" "$DOCKERFILE"
+            CHANGED=1
+            SUMMARY="${SUMMARY}\n- ${arg}: ${current} => ${latest}"
+          else
+            echo "  [$arg] 远程版本($latest)不高于当前($current), 跳过"
+          fi
+        }
+
+        echo "===== 检查 nginx ====="
+        try_update NGINX_VERSION "$(nginx_latest)"
+
+        echo "===== 检查各依赖(仅稳定 release) ====="
+        try_update NGX_DEVEL_KIT_VERSION       "$(gh_latest_stable simpl/ngx_devel_kit)"
+        try_update LUA_NGINX_MODULE_VERSION    "$(gh_latest_stable openresty/lua-nginx-module)"
+        try_update NGINX_HTTP_CONCAT_VERSION   "$(gh_latest_stable alibaba/nginx-http-concat)"
+        try_update LIBCORAZA_VERSION           "$(gh_latest_stable corazawaf/libcoraza)"
+        try_update CORAZA_NGINX_VERSION        "$(gh_latest_stable corazawaf/coraza-nginx)"
+        try_update OWASP_CRS_VERSION           "$(gh_latest_stable coreruleset/coreruleset)"
+        try_update LUA_RESTY_LRUCACHE_VERSION  "$(gh_latest_stable openresty/lua-resty-lrucache)"
+        try_update OPENRESTY_HEADERS_VERSION   "$(gh_latest_stable openresty/headers-more-nginx-module)"
+        try_update CLOUDFLARE_COOKIE_VERSION   "$(gh_latest_stable cloudflare/lua-resty-cookie)"
+        try_update OPENRESTY_DNS_VERSION       "$(gh_latest_stable openresty/lua-resty-dns)"
+        try_update OPENRESTY_MEMCACHED_VERSION "$(gh_latest_stable openresty/lua-resty-memcached)"
+        try_update OPENRESTY_MYSQL_VERSION     "$(gh_latest_stable openresty/lua-resty-mysql)"
+        try_update OPENRESTY_REDIS_VERSION     "$(gh_latest_stable openresty/lua-resty-redis)"
+        try_update OPENRESTY_SHELL_VERSION     "$(gh_latest_stable openresty/lua-resty-shell)"
+        try_update OPENRESTY_HEALTHCHECK_VERSION "$(gh_latest_stable openresty/lua-resty-upstream-healthcheck)"
+        try_update OPENRESTY_WEBSOCKET_VERSION "$(gh_latest_stable openresty/lua-resty-websocket)"
+        try_update LUA_UPSTREAM_VERSION        "$(gh_latest_stable openresty/lua-upstream-nginx-module)"
+
+        # 说明: 以下依赖不纳入自动更新(需人工评估兼容性):
+        #   - LUAJIT_VERSION / LUA_RESTY_CORE_VERSION / OPENRESTY_STREAMLUA_VERSION
+        #     (OpenResty master 捆绑组合, 版本需彼此配套, 自动升级易破坏兼容)
+        #   - OPENSSL_QUIC_VERSION (QuicTLS 独立打 tag, 命名不规则)
+        #   - NGINX_STICKY_MODULE_NG_VERSION / PROMETHEUS_VERSION (上游长期停更/非 semver)
+
+        echo ""
+        if [ "$CHANGED" = "1" ]; then
+          echo "检测到版本更新:"
+          echo -e "$SUMMARY"
+          echo "SUMMARY<<EOF" >> "$GITHUB_ENV"
+          echo -e "$SUMMARY" >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+          echo "CHANGED=1" >> "$GITHUB_ENV"
+        else
+          echo "所有版本均为最新, 无需更新"
+          echo "CHANGED=0" >> "$GITHUB_ENV"
+        fi
+
+    - name: 提交更新
+      if: env.CHANGED == '1'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add Dockerfile
+        git commit -m "chore: 自动更新 nginx 及依赖版本号${SUMMARY}"
+        git push
+
+    - name: 删除旧的GitHub-workflow
+      uses: Mattraks/delete-workflow-runs@main
+      with:
+        repository: ${{ github.repository }}
+        retain_days: 1
+        keep_minimum_runs: 3    #保留多少个workflow不删除

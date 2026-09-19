@@ -1,182 +1,121 @@
-#############################
-#     设置公共的变量         #
-#############################
-FROM ubuntu:resolute AS base
+#############################################################################
+#  xiaonuo-nginx (Lua + Coraza WAF + HTTP/3) 多阶段构建
+#  - builder(编译阶段) = iflyelf/ubuntu:latest
+#      已预装 Go / Node / Python / build-essential 及大部分 -dev 库,
+#      仅补装 nginx 专用的少量 -dev 库, 构建更快更稳。
+#  - runtime(运行阶段) = iflyelf/ubuntu:lite
+#      仅拷贝编译产物 + 安装 nginx 运行所需的共享库, 镜像更小。
+#############################################################################
 
-# 作者描述信息
+# ========================= 全局版本变量(两个阶段共享) =========================
+# nginx  https://github.com/nginx/nginx
+ARG NGINX_VERSION=1.31.6
+# QuicTLS OpenSSL (带 QUIC 支持, HTTP/3 必需)  https://github.com/quictls/openssl
+ARG OPENSSL_QUIC_VERSION=openssl-3.3.0-quic1
+# luajit2  https://github.com/openresty/luajit2
+ARG LUAJIT_VERSION=2.1-20250826
+# ngx_devel_kit  https://github.com/simpl/ngx_devel_kit
+ARG NGX_DEVEL_KIT_VERSION=0.3.4
+# lua-nginx-module  https://github.com/openresty/lua-nginx-module
+ARG LUA_NGINX_MODULE_VERSION=0.10.31
+# nginx-sticky-module-ng  https://github.com/Refinitiv/nginx-sticky-module-ng
+ARG NGINX_STICKY_MODULE_NG_VERSION=1.2.6
+# nginx-http-concat  https://github.com/alibaba/nginx-http-concat
+ARG NGINX_HTTP_CONCAT_VERSION=1.2.2
+# libcoraza (OWASP Coraza WAF C 库)  https://github.com/corazawaf/libcoraza
+ARG LIBCORAZA_VERSION=1.7.0
+# coraza-nginx (libcoraza 的 nginx 连接器)  https://github.com/corazawaf/coraza-nginx
+ARG CORAZA_NGINX_VERSION=0.21.0
+# OWASP Core Rule Set  https://github.com/coreruleset/coreruleset
+ARG OWASP_CRS_VERSION=4.29.0
+# lua-resty-core  https://github.com/openresty/lua-resty-core
+ARG LUA_RESTY_CORE_VERSION=0.1.34rc3
+# lua-resty-lrucache  https://github.com/openresty/lua-resty-lrucache
+ARG LUA_RESTY_LRUCACHE_VERSION=0.15
+# headers-more-nginx-module  https://github.com/openresty/headers-more-nginx-module
+ARG OPENRESTY_HEADERS_VERSION=0.39
+# lua-resty-cookie  https://github.com/cloudflare/lua-resty-cookie
+ARG CLOUDFLARE_COOKIE_VERSION=0.1.0
+# lua-resty-dns  https://github.com/openresty/lua-resty-dns
+ARG OPENRESTY_DNS_VERSION=0.23
+# lua-resty-memcached  https://github.com/openresty/lua-resty-memcached
+ARG OPENRESTY_MEMCACHED_VERSION=0.17
+# lua-resty-mysql  https://github.com/openresty/lua-resty-mysql
+ARG OPENRESTY_MYSQL_VERSION=0.30
+# lua-resty-redis  https://github.com/openresty/lua-resty-redis
+ARG OPENRESTY_REDIS_VERSION=0.33
+# lua-resty-shell  https://github.com/openresty/lua-resty-shell
+ARG OPENRESTY_SHELL_VERSION=0.03
+# lua-resty-upstream-healthcheck  https://github.com/openresty/lua-resty-upstream-healthcheck
+ARG OPENRESTY_HEALTHCHECK_VERSION=0.09
+# lua-resty-websocket  https://github.com/openresty/lua-resty-websocket
+ARG OPENRESTY_WEBSOCKET_VERSION=0.13
+# lua-upstream-nginx-module  https://github.com/openresty/lua-upstream-nginx-module
+ARG LUA_UPSTREAM_VERSION=0.08
+# nginx-lua-prometheus  https://github.com/knyar/nginx-lua-prometheus
+ARG PROMETHEUS_VERSION=0.20240525
+# stream-lua-nginx-module  https://github.com/openresty/stream-lua-nginx-module
+ARG OPENRESTY_STREAMLUA_VERSION=0.0.19rc4
+
+# 公共路径/环境变量
+ARG NGINX_DIR=/data/nginx
+ARG DOWNLOAD_SRC=/tmp/src
+ARG LUAJIT_LIB=/usr/local/lib
+ARG LUAJIT_INC=/usr/local/include/luajit-2.1
+ARG LUA_LIB_DIR=/usr/local/share/lua/5.1
+
+
+####################################################################
+#                     构建阶段 (builder)                            #
+####################################################################
+FROM iflyelf/ubuntu:latest AS builder
+
 LABEL org.opencontainers.image.authors="iflyelf" \
       org.opencontainers.image.vendor="iflyelf"
 
-# 时区设置
-ARG TZ=Asia/Shanghai
-ENV TZ=$TZ
-# 语言设置
-ARG LANG=zh_CN.UTF-8
-ENV LANG=$LANG
+# buildx 自动注入的目标架构
+ARG TARGETARCH
+ARG TARGETVARIANT
 
-# 镜像变量
-ARG DOCKER_IMAGE=iflyelf/nginx
-ENV DOCKER_IMAGE=$DOCKER_IMAGE
-ARG DOCKER_IMAGE_OS=ubuntu
-ENV DOCKER_IMAGE_OS=$DOCKER_IMAGE_OS
-ARG DOCKER_IMAGE_TAG=resolute
-ENV DOCKER_IMAGE_TAG=$DOCKER_IMAGE_TAG
+# 继承全局版本变量
+ARG NGINX_VERSION
+ARG OPENSSL_QUIC_VERSION
+ARG LUAJIT_VERSION
+ARG NGX_DEVEL_KIT_VERSION
+ARG LUA_NGINX_MODULE_VERSION
+ARG NGINX_STICKY_MODULE_NG_VERSION
+ARG NGINX_HTTP_CONCAT_VERSION
+ARG LIBCORAZA_VERSION
+ARG CORAZA_NGINX_VERSION
+ARG OWASP_CRS_VERSION
+ARG LUA_RESTY_CORE_VERSION
+ARG LUA_RESTY_LRUCACHE_VERSION
+ARG OPENRESTY_HEADERS_VERSION
+ARG CLOUDFLARE_COOKIE_VERSION
+ARG OPENRESTY_DNS_VERSION
+ARG OPENRESTY_MEMCACHED_VERSION
+ARG OPENRESTY_MYSQL_VERSION
+ARG OPENRESTY_REDIS_VERSION
+ARG OPENRESTY_SHELL_VERSION
+ARG OPENRESTY_HEALTHCHECK_VERSION
+ARG OPENRESTY_WEBSOCKET_VERSION
+ARG LUA_UPSTREAM_VERSION
+ARG PROMETHEUS_VERSION
+ARG OPENRESTY_STREAMLUA_VERSION
+ARG NGINX_DIR
+ARG DOWNLOAD_SRC
+ARG LUAJIT_LIB
+ARG LUAJIT_INC
+ARG LUA_LIB_DIR
 
-# ##############################################################################
+ENV NGINX_DIR=$NGINX_DIR \
+    DOWNLOAD_SRC=$DOWNLOAD_SRC \
+    LUAJIT_LIB=$LUAJIT_LIB \
+    LUAJIT_INC=$LUAJIT_INC \
+    LUA_LIB_DIR=$LUA_LIB_DIR \
+    LD_LIBRARY_PATH=/usr/local/lib
 
-# ***** 设置变量 *****
-
-# 工作目录
-ARG NGINX_DIR=/data/nginx
-ENV NGINX_DIR=$NGINX_DIR
-# NGINX环境变量
-ARG PATH=/data/nginx/sbin:$PATH
-ENV PATH=$PATH
-# 源文件下载路径
-ARG DOWNLOAD_SRC=/tmp/src
-ENV DOWNLOAD_SRC=$DOWNLOAD_SRC
-
-# GO环境变量
-ARG GO_VERSION=1.27.1
-ENV GO_VERSION=$GO_VERSION
-ARG GOROOT=/opt/go
-ENV GOROOT=$GOROOT
-ARG GOPATH=/opt/golang
-ENV GOPATH=$GOPATH
-# Go 模块代理(加速依赖下载, 国内构建必备; 海外可改为 https://proxy.golang.org,direct)
-ARG GOPROXY=https://goproxy.cn,direct
-ENV GOPROXY=$GOPROXY
-
-# luajit2
-# https://github.com/openresty/luajit2
-ARG LUAJIT_VERSION=2.1-20250826
-ENV LUAJIT_VERSION=$LUAJIT_VERSION
-ARG LUAJIT_LIB=/usr/local/lib
-ENV LUAJIT_LIB=$LUAJIT_LIB
-ARG LUAJIT_INC=/usr/local/include/luajit-2.1
-ENV LUAJIT_INC=$LUAJIT_INC
-ARG LD_LIBRARY_PATH=/usr/local/lib/:$LD_LIBRARY_PATH
-ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH
-
-# ngx_devel_kit
-# https://github.com/simpl/ngx_devel_kit
-ARG NGX_DEVEL_KIT_VERSION=0.3.4
-ENV NGX_DEVEL_KIT_VERSION=$NGX_DEVEL_KIT_VERSION
-
-# lua-nginx-module
-# https://github.com/openresty/lua-nginx-module
-ARG LUA_NGINX_MODULE_VERSION=0.10.31
-ENV LUA_NGINX_MODULE_VERSION=$LUA_NGINX_MODULE_VERSION
-
-# nginx-sticky-module-ng
-# https://github.com/Refinitiv/nginx-sticky-module-ng
-ARG NGINX_STICKY_MODULE_NG_VERSION=1.2.6
-ENV NGINX_STICKY_MODULE_NG_VERSION=$NGINX_STICKY_MODULE_NG_VERSION
-
-# nginx-http-concat
-# https://github.com/alibaba/nginx-http-concat
-ARG NGINX_HTTP_CONCAT_VERSION=1.2.2
-ENV NGINX_HTTP_CONCAT_VERSION=$NGINX_HTTP_CONCAT_VERSION
-
-# libcoraza (OWASP Coraza WAF 的 C 库, ModSecurity 继任者)
-# https://github.com/corazawaf/libcoraza
-ARG LIBCORAZA_VERSION=1.7.0
-ENV LIBCORAZA_VERSION=$LIBCORAZA_VERSION
-
-# coraza-nginx (libcoraza 的 nginx 连接器模块)
-# https://github.com/corazawaf/coraza-nginx
-ARG CORAZA_NGINX_VERSION=0.21.0
-ENV CORAZA_NGINX_VERSION=$CORAZA_NGINX_VERSION
-
-# OWASP Core Rule Set (CRS) 规则集
-# https://github.com/coreruleset/coreruleset
-ARG OWASP_CRS_VERSION=4.29.0
-ENV OWASP_CRS_VERSION=$OWASP_CRS_VERSION
-
-# lua-resty-core
-# https://github.com/openresty/lua-resty-core
-# 0.1.34rc3 与 lua-nginx-module 0.10.31 配套(OpenResty master 捆绑组合)
-ARG LUA_RESTY_CORE_VERSION=0.1.34rc3
-ENV LUA_RESTY_CORE_VERSION=$LUA_RESTY_CORE_VERSION
-ARG LUA_LIB_DIR=/usr/local/share/lua/5.1
-ENV LUA_LIB_DIR=$LUA_LIB_DIR
-
-# lua-resty-lrucache
-# https://github.com/openresty/lua-resty-lrucache
-ARG LUA_RESTY_LRUCACHE_VERSION=0.15
-ENV LUA_RESTY_LRUCACHE_VERSION=$LUA_RESTY_LRUCACHE_VERSION
-
-# headers-more-nginx-module
-# https://github.com/openresty/headers-more-nginx-module
-ARG OPENRESTY_HEADERS_VERSION=0.39
-ENV OPENRESTY_HEADERS_VERSION=$OPENRESTY_HEADERS_VERSION
-
-# lua-resty-cookie
-# https://github.com/cloudflare/lua-resty-cookie
-ARG CLOUDFLARE_COOKIE_VERSION=0.1.0
-ENV CLOUDFLARE_COOKIE_VERSION=$CLOUDFLARE_COOKIE_VERSION
-
-# lua-resty-dns
-# https://github.com/openresty/lua-resty-dns
-ARG OPENRESTY_DNS_VERSION=0.23
-ENV OPENRESTY_DNS_VERSION=$OPENRESTY_DNS_VERSION
-
-# lua-resty-memcached
-# https://github.com/openresty/lua-resty-memcached
-ARG OPENRESTY_MEMCACHED_VERSION=0.17
-ENV OPENRESTY_MEMCACHED_VERSION=$OPENRESTY_MEMCACHED_VERSION
-
-# lua-resty-mysql
-# https://github.com/openresty/lua-resty-mysql
-ARG OPENRESTY_MYSQL_VERSION=0.30
-ENV OPENRESTY_MYSQL_VERSION=$OPENRESTY_MYSQL_VERSION
-
-# lua-resty-redis
-# https://github.com/openresty/lua-resty-redis
-ARG OPENRESTY_REDIS_VERSION=0.33
-ENV OPENRESTY_REDIS_VERSION=$OPENRESTY_REDIS_VERSION
-
-# lua-resty-shell
-# https://github.com/openresty/lua-resty-shell
-ARG OPENRESTY_SHELL_VERSION=0.03
-ENV OPENRESTY_SHELL_VERSION=$OPENRESTY_SHELL_VERSION
-
-# lua-resty-upstream-healthcheck
-# https://github.com/openresty/lua-resty-upstream-healthcheck
-ARG OPENRESTY_HEALTHCHECK_VERSION=0.09
-ENV OPENRESTY_HEALTHCHECK_VERSION=$OPENRESTY_HEALTHCHECK_VERSION
-
-# lua-resty-websocket
-# https://github.com/openresty/lua-resty-websocket
-ARG OPENRESTY_WEBSOCKET_VERSION=0.13
-ENV OPENRESTY_WEBSOCKET_VERSION=$OPENRESTY_WEBSOCKET_VERSION
-
-# lua-upstream-nginx-module
-# https://github.com/openresty/lua-upstream-nginx-module
-ARG LUA_UPSTREAM_VERSION=0.08
-ENV LUA_UPSTREAM_VERSION=$LUA_UPSTREAM_VERSION
-
-# nginx-lua-prometheus
-# https://github.com/knyar/nginx-lua-prometheus
-ARG PROMETHEUS_VERSION=0.20240525
-ENV PROMETHEUS_VERSION=$PROMETHEUS_VERSION
-
-# stream-lua-nginx-module
-# https://github.com/openresty/stream-lua-nginx-module
-# 0.0.19rc4 与 lua-nginx-module 0.10.31 配套(OpenResty master 捆绑组合)
-ARG OPENRESTY_STREAMLUA_VERSION=0.0.19rc4
-ENV OPENRESTY_STREAMLUA_VERSION=$OPENRESTY_STREAMLUA_VERSION
-
-# NGINX
-# https://github.com/nginx/nginx
-ARG NGINX_VERSION=1.31.5
-ENV NGINX_VERSION=$NGINX_VERSION
-
-# QuicTLS OpenSSL (带 QUIC 支持的 OpenSSL, HTTP/3 必需)
-# https://github.com/quictls/openssl
-ARG OPENSSL_QUIC_VERSION=openssl-3.3.0-quic1
-ENV OPENSSL_QUIC_VERSION=$OPENSSL_QUIC_VERSION
-
+# nginx 编译参数
 ARG NGINX_BUILD_CONFIG="\
     --prefix=${NGINX_DIR} \
     --sbin-path=${NGINX_DIR}/sbin/nginx \
@@ -227,88 +166,24 @@ ARG NGINX_BUILD_CONFIG="\
 "
 ENV NGINX_BUILD_CONFIG=$NGINX_BUILD_CONFIG
 
-# 构建安装依赖
-ARG BUILD_DEPS="\
-    build-essential \
-    ca-certificates \
-    curl \
-    wget \
-    git \
-    libtool \
-    autoconf \
-    automake \
-    pkg-config \
-    m4 \
-    zsh"
-ENV BUILD_DEPS=$BUILD_DEPS
-
-ARG NGINX_BUILD_DEPS="\
-    libssl-dev \
-    zlib1g-dev \
+# ***** 仅补装 nginx 专用的 -dev 库 *****
+# iflyelf/ubuntu:latest 已含 build-essential/go/libssl-dev/zlib1g-dev/libxml2-dev/libxslt1-dev,
+# 这里只补装其缺少的 nginx 构建库, 避免重装庞大依赖列表。
+ARG NGINX_EXTRA_BUILD_DEPS="\
     libpcre2-dev \
-    libxml2-dev \
-    libxslt1-dev \
     libgd-dev \
     libgeoip-dev"
-ENV NGINX_BUILD_DEPS=$NGINX_BUILD_DEPS
-
-####################################
-#    构建支持LUA的Nginx             #
-####################################
-FROM base AS builder
-
-# buildx 自动注入的目标架构 (amd64/arm64/arm/386), 用于按架构下载对应 Go 包
-ARG TARGETARCH
-ARG TARGETVARIANT
-
-# ***** 安装依赖 *****
 RUN set -eux && \
-   # 更新源地址
-   sed -i 's@URIs: http://[a-z.]*\.ubuntu\.com/ubuntu/@URIs: https://mirrors.aliyun.com/ubuntu/@g' /etc/apt/sources.list.d/ubuntu.sources && \
-   sed -i 's@^Types: deb$@Types: deb deb-src@' /etc/apt/sources.list.d/ubuntu.sources && \
-   # 解决证书认证失败问题
-   touch /etc/apt/apt.conf.d/99verify-peer.conf && echo >>/etc/apt/apt.conf.d/99verify-peer.conf "Acquire { https::Verify-Peer false }" && \
-   # 更新系统软件
-   DEBIAN_FRONTEND=noninteractive apt update -qqy && apt upgrade -qqy && \
-   # 安装依赖包
-   DEBIAN_FRONTEND=noninteractive apt install -qqy $BUILD_DEPS $NGINX_BUILD_DEPS --option=Dpkg::Options::=--force-confdef && \
-   # 验证依赖包是否真正安装成功
-   for pkg in $BUILD_DEPS $NGINX_BUILD_DEPS; do \
-       if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then \
-           echo "ERROR: 依赖包未成功安装: $pkg" >&2 && exit 1; \
-       fi; \
-   done && \
-   echo "所有依赖包验证通过" && \
-   DEBIAN_FRONTEND=noninteractive apt -qqy autoremove --purge && \
-   DEBIAN_FRONTEND=noninteractive apt -qqy autoclean && \
-   rm -rf /var/lib/apt/lists/* && \
-   # 更新时区
-   ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime && \
-   # 更新时间
-   echo ${TZ} > /etc/timezone
+    DEBIAN_FRONTEND=noninteractive apt update -qqy && \
+    DEBIAN_FRONTEND=noninteractive apt install -qqy $NGINX_EXTRA_BUILD_DEPS --option=Dpkg::Options::=--force-confdef && \
+    for pkg in $NGINX_EXTRA_BUILD_DEPS; do \
+        if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then \
+            echo "ERROR: 依赖包未成功安装: $pkg" >&2 && exit 1; \
+        fi; \
+    done && \
+    echo "nginx 构建依赖补装完成" && \
+    rm -rf /var/lib/apt/lists/*
 
-# ***** 安装golang *****
-RUN set -eux && \
-    # 映射 buildx TARGETARCH 到 Go 官方包名 (arm -> armv6l, 其他直接用)
-    case "${TARGETARCH}" in \
-        amd64)   GO_ARCH=amd64   ;; \
-        arm64)   GO_ARCH=arm64   ;; \
-        arm)     GO_ARCH=armv6l  ;; \
-        386)     GO_ARCH=386     ;; \
-        *)       echo "不支持的架构: ${TARGETARCH}" && exit 1 ;; \
-    esac && \
-    echo "目标架构: ${TARGETARCH} => Go 包: linux-${GO_ARCH}" && \
-    wget --no-check-certificate https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz \
-         -O /tmp/go-${GO_ARCH}.tar.gz && \
-    tar xzf /tmp/go-${GO_ARCH}.tar.gz -C /opt && \
-    mkdir -pv ${GOPATH}/bin && \
-    # 仅删除 Go 压缩包, 不清空整个 /tmp (避免误删 DOWNLOAD_SRC=/tmp/src)
-    rm -f /tmp/go-${GO_ARCH}.tar.gz && \
-    # 软链 go 到 /usr/bin, 后续 RUN 层无需配 PATH
-    ln -sf /opt/go/bin/* /usr/bin/ && \
-    go version
-
-# ##############################################################################
 # ***** 创建相关目录 *****
 RUN set -eux && \
     mkdir -pv ${DOWNLOAD_SRC} && \
@@ -320,7 +195,6 @@ RUN set -eux && \
     mkdir -p ${NGINX_DIR}/temp/scgi_temp && \
     mkdir -p ${NGINX_DIR}/logs/hack
 
-# ##############################################################################
 # ***** 下载源码包 *****
 RUN set -eux && \
     wget --no-check-certificate http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
@@ -373,42 +247,29 @@ RUN set -eux && \
     -O ${DOWNLOAD_SRC}/stream-lua-nginx-module.tar.gz && \
     cd ${DOWNLOAD_SRC} && for tar in *.tar.gz;  do tar xvf $tar -C ${DOWNLOAD_SRC}/; done
 
-# ##############################################################################
-# ***** 安装中间件 *****
+# ***** 安装中间件 (LuaJIT 及各 lua-resty 库) *****
 RUN set -eux && \
-    # 安装LUAJIT
     cd ${DOWNLOAD_SRC}/luajit2-${LUAJIT_VERSION} && \
     make -j$(($(nproc)+1)) && make -j$(($(nproc)+1)) install && \
-    # 安装LUA_RESTY_CORE
     cd ${DOWNLOAD_SRC}/lua-resty-core-${LUA_RESTY_CORE_VERSION} && \
     make -j$(($(nproc)+1)) && make -j$(($(nproc)+1)) install && \
-    # 安装PROMETHEUS
     mv ${DOWNLOAD_SRC}/nginx-lua-prometheus-${PROMETHEUS_VERSION}/*.lua ${LUA_LIB_DIR}/ && \
-    # 安装LUA_RESTY_LRUCACHE
     cd ${DOWNLOAD_SRC}/lua-resty-lrucache-${LUA_RESTY_LRUCACHE_VERSION} && \
     make -j$(($(nproc)+1)) && make -j$(($(nproc)+1)) install && \
-    # 安装CLOUDFLARE_COOKIE
     cd ${DOWNLOAD_SRC}/lua-resty-cookie-${CLOUDFLARE_COOKIE_VERSION} && \
     make -j$(($(nproc)+1)) && make -j$(($(nproc)+1)) install && \
-    # 安装OPENRESTY_DNS
     cd ${DOWNLOAD_SRC}/lua-resty-dns-${OPENRESTY_DNS_VERSION} && \
     make -j$(($(nproc)+1)) && make -j$(($(nproc)+1)) install && \
-    # 安装OPENRESTY_MEMCACHED
     cd ${DOWNLOAD_SRC}/lua-resty-memcached-${OPENRESTY_MEMCACHED_VERSION} && \
     make -j$(($(nproc)+1)) && make -j$(($(nproc)+1)) install && \
-    # 安装OPENRESTY_MYSQL
     cd ${DOWNLOAD_SRC}/lua-resty-mysql-${OPENRESTY_MYSQL_VERSION} && \
     make -j$(($(nproc)+1)) && make -j$(($(nproc)+1)) install && \
-    # 安装OPENRESTY_REDIS
     cd ${DOWNLOAD_SRC}/lua-resty-redis-${OPENRESTY_REDIS_VERSION} && \
     make -j$(($(nproc)+1)) && make -j$(($(nproc)+1)) install && \
-    # 安装OPENRESTY_SHELL
     cd ${DOWNLOAD_SRC}/lua-resty-shell-${OPENRESTY_SHELL_VERSION} && \
     make -j$(($(nproc)+1)) && make -j$(($(nproc)+1)) install && \
-    # 安装OPENRESTY_HEALTHCHECK
     cd ${DOWNLOAD_SRC}/lua-resty-upstream-healthcheck-${OPENRESTY_HEALTHCHECK_VERSION} && \
     make -j$(($(nproc)+1)) && make -j$(($(nproc)+1)) install && \
-    # 安装OPENRESTY_WEBSOCKET
     cd ${DOWNLOAD_SRC}/lua-resty-websocket-${OPENRESTY_WEBSOCKET_VERSION} && \
     make -j$(($(nproc)+1)) && make -j$(($(nproc)+1)) install
 
@@ -425,13 +286,9 @@ RUN set -eux && \
     install -m 644 coraza/coraza.h /usr/local/include/coraza/ && \
     ldconfig
 
-# ***** 安装NGINX *****
+# ***** 编译安装 NGINX *****
 RUN set -eux && \
-    # 修复 nginx-sticky-module-ng 1.2.6 的系统性老化(撞上 nginx 1.23+ 与 OpenSSL 3.x 两代 API 变更):
-    # 1) nginx 1.23.0: r->headers_in.cookies(ngx_array_t) 改为 r->headers_in.cookie(ngx_table_elt_t *),
-    #    且 ngx_http_parse_multi_header_lines() 增加首参 r、返回值由 ngx_int_t 改为 ngx_table_elt_t *
-    #    故调用方式与返回值比较(NGX_DECLINED -> NULL)都要改
-    # 2) OpenSSL 3.x 不再暴露 MD5_DIGEST_LENGTH(=16)/MD5_CBLOCK(=64) 宏, 用 RFC1321 固定值替换
+    # 修复 nginx-sticky-module-ng 1.2.6 的系统性老化(撞上 nginx 1.23+ 与 OpenSSL 3.x 两代 API 变更)
     sed -i \
         -e 's|ngx_http_parse_multi_header_lines(&r->headers_in\.cookies, \(&iphp->sticky_conf->cookie_name, &route)\) != NGX_DECLINED|ngx_http_parse_multi_header_lines(r, r->headers_in.cookie, \1 != NULL|' \
         ${DOWNLOAD_SRC}/nginx-sticky-module-ng-${NGINX_STICKY_MODULE_NG_VERSION}/ngx_http_sticky_module.c && \
@@ -463,132 +320,69 @@ RUN set -eux && \
     cp -r ${DOWNLOAD_SRC}/coreruleset-${OWASP_CRS_VERSION}/plugins ${NGINX_DIR}/conf/waf/owasp-crs/ && \
     cp ${DOWNLOAD_SRC}/coreruleset-${OWASP_CRS_VERSION}/crs-setup.conf.example ${NGINX_DIR}/conf/waf/crs-setup.conf
 
-# ##############################################################################
 
+####################################################################
+#                     运行阶段 (runtime)                            #
+####################################################################
+FROM iflyelf/ubuntu:lite
 
-##########################################
-#         构建最新的镜像                  #
-##########################################
-FROM base
-
-# 作者描述信息
 LABEL org.opencontainers.image.authors="iflyelf" \
-      org.opencontainers.image.vendor="iflyelf"
+      org.opencontainers.image.vendor="iflyelf" \
+      org.opencontainers.image.description="xiaonuo-nginx (Lua + Coraza WAF + HTTP/3), runtime on ubuntu:lite"
 
-# buildx 自动注入的目标架构 (amd64/arm64/arm/386), 用于按架构下载对应 Go 包
-ARG TARGETARCH
-ARG TARGETVARIANT
-
-# 时区设置
+# 时区/语言(继承 lite 默认, 显式声明便于覆盖)
 ARG TZ=Asia/Shanghai
 ENV TZ=$TZ
-# 语言设置
 ARG LANG=zh_CN.UTF-8
 ENV LANG=$LANG
 
-# GO环境变量
-ARG GO_VERSION=1.27.1
-ENV GO_VERSION=$GO_VERSION
-ARG GOROOT=/opt/go
-ENV GOROOT=$GOROOT
-ARG GOPATH=/opt/golang
-ENV GOPATH=$GOPATH
-# Go 模块代理(加速依赖下载, 国内构建必备; 海外可改为 https://proxy.golang.org,direct)
-ARG GOPROXY=https://goproxy.cn,direct
-ENV GOPROXY=$GOPROXY
+# 镜像变量
+ARG DOCKER_IMAGE=iflyelf/nginx
+ENV DOCKER_IMAGE=$DOCKER_IMAGE
 
-# 安装依赖包
-ARG PKG_DEPS="\
-    zsh \
-    bash \
-    bash-doc \
-    bash-completion \
-    bind9-dnsutils \
-    iproute2 \
-    net-tools \
-    sysstat \
-    ncat \
-    git \
-    vim \
-    jq \
-    lrzsz \
-    tzdata \
-    curl \
-    wget \
-    axel \
-    lsof \
-    zip \
-    unzip \
-    tar \
-    rsync \
-    iputils-ping \
-    telnet \
-    procps \
+# 继承路径变量
+ARG NGINX_DIR=/data/nginx
+ENV NGINX_DIR=$NGINX_DIR
+# nginx 运行时环境变量: sbin 进 PATH, LuaJIT/coraza 共享库进库路径
+ENV PATH=${NGINX_DIR}/sbin:/usr/local/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/lib
+
+# ***** 安装 nginx 运行所需的共享库(非 -dev 运行库) *****
+# 依据编译参数精确选取运行库(避免多装):
+#   libpcre2-8-0 -> 正则(核心, 必需)
+#   zlib1g       -> gzip / gzip_static
+#   libgd3       -> --with-http_image_filter_module
+#   libxml2      -> libcoraza WAF (解析 xml 规则)
+#   libaio1t64   -> --with-file-aio
+#   ca-certificates -> TLS 根证书
+# 说明: 未启用 http_geoip_module / http_xslt_module, 故不装 libgeoip / libxslt。
+ARG NGINX_RUNTIME_DEPS="\
+    libpcre2-8-0 \
+    zlib1g \
+    libgd3 \
+    libxml2-16 \
     libaio1t64 \
-    numactl \
-    xz-utils \
-    gnupg2 \
-    psmisc \
-    libmecab2 \
-    debsums \
-    locales \
-    iptables \
-    nftables \
-    python3 \
-    python3-dev \
-    python3-pip \
-    python3-yaml \
-    python3-venv \
-    python-is-python3 \
-    supervisor \
-    language-pack-zh-hans \
-    fonts-droid-fallback \
-    fonts-wqy-zenhei \
-    fonts-wqy-microhei \
-    fonts-arphic-ukai \
-    fonts-arphic-uming \
     ca-certificates"
-ENV PKG_DEPS=$PKG_DEPS
-
-
-# ***** 安装依赖 *****
 RUN set -eux && \
-   # 更新源地址
-   sed -i 's@URIs: http://[a-z.]*\.ubuntu\.com/ubuntu/@URIs: https://mirrors.aliyun.com/ubuntu/@g' /etc/apt/sources.list.d/ubuntu.sources && \
-   sed -i 's@^Types: deb$@Types: deb deb-src@' /etc/apt/sources.list.d/ubuntu.sources && \
-   # 解决证书认证失败问题
-   touch /etc/apt/apt.conf.d/99verify-peer.conf && echo >>/etc/apt/apt.conf.d/99verify-peer.conf "Acquire { https::Verify-Peer false }" && \
-   # 更新系统软件
-   DEBIAN_FRONTEND=noninteractive apt update -qqy && apt upgrade -qqy && \
-   # 安装依赖包
-   DEBIAN_FRONTEND=noninteractive apt install -qqy $PKG_DEPS $NGINX_BUILD_DEPS --option=Dpkg::Options::=--force-confdef && \
-   # 验证依赖包是否真正安装成功(逐个检查 dpkg 状态, 缺失则构建失败)
-   for pkg in $PKG_DEPS $NGINX_BUILD_DEPS; do \
-       if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then \
-           echo "ERROR: 依赖包未成功安装: $pkg" >&2 && exit 1; \
-       fi; \
-   done && \
-   echo "所有依赖包验证通过" && \
-   DEBIAN_FRONTEND=noninteractive apt -qqy autoremove --purge && \
-   DEBIAN_FRONTEND=noninteractive apt -qqy autoclean && \
-   rm -rf /var/lib/apt/lists/* && \
-   # 更新时区
-   ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime && \
-   # 更新时间
-   echo ${TZ} > /etc/timezone && \
-   # 更改为zsh
-   sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" || true && \
-   sed -i -e "s/bin\/ash/bin\/zsh/" /etc/passwd && \
-   sed -i -e 's/mouse=/mouse-=/g' /usr/share/vim/vim*/defaults.vim && \
-   locale-gen zh_CN.UTF-8 && localedef -f UTF-8 -i zh_CN zh_CN.UTF-8 && locale-gen && \
-   /bin/zsh
+    DEBIAN_FRONTEND=noninteractive apt update -qqy && \
+    DEBIAN_FRONTEND=noninteractive apt install -qqy --no-install-recommends $NGINX_RUNTIME_DEPS --option=Dpkg::Options::=--force-confdef && \
+    for pkg in $NGINX_RUNTIME_DEPS; do \
+        if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then \
+            echo "ERROR: 运行依赖未成功安装: $pkg" >&2 && exit 1; \
+        fi; \
+    done && \
+    echo "nginx 运行依赖验证通过" && \
+    DEBIAN_FRONTEND=noninteractive apt -qqy autoremove --purge && \
+    DEBIAN_FRONTEND=noninteractive apt -qqy autoclean && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
-# 拷贝文件
+# ***** 拷贝编译产物 *****
+# LuaJIT / libcoraza 共享库 + lua 库 + nginx 安装目录
 COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/local/share/lua /usr/local/share/lua
 COPY --from=builder /data /data
 
-# 拷贝配置文件
+# ***** 拷贝配置文件 *****
 COPY conf/nginx/nginx.conf /data/nginx/conf/nginx.conf
 COPY conf/nginx/gzip.conf /data/nginx/conf/gzip.conf
 COPY conf/nginx/cache.conf /data/nginx/conf/cache.conf
@@ -601,63 +395,21 @@ COPY conf/nginx/ssl /ssl
 COPY conf/nginx/vhost /data/nginx/conf/vhost
 COPY www /www
 
-
-# 将请求和错误日志转发到docker日志收集器
+# ***** 初始化: 用户/日志/动态库/自检 *****
 RUN set -eux && \
-    # 注册 libcoraza.so 到动态链接库缓存(nginx worker 运行时 dlopen 加载)
+    # 注册 libcoraza.so / libluajit 到动态链接库缓存
     ldconfig && \
+    # 将请求和错误日志转发到 docker 日志收集器
     ln -sf /dev/stdout /data/nginx/logs/access.log && \
     ln -sf /dev/stderr /data/nginx/logs/error.log && \
-# 创建用户和用户组
-addgroup --system --quiet nginx && \
-adduser --quiet --system --disabled-login --ingroup nginx --home /data/nginx --no-create-home nginx && \
-# smoke test
-# ##############################################################################
+    # 创建 nginx 用户和用户组
+    addgroup --system --quiet nginx && \
+    adduser --quiet --system --disabled-login --ingroup nginx --home /data/nginx --no-create-home nginx && \
+    # 软链 nginx 到系统 PATH
     ln -sf ${NGINX_DIR}/sbin/* /usr/sbin/ && \
+    # smoke test: 打印编译参数并校验配置
     nginx -V && \
     nginx -t
-
-# ***** 安装 Node.js 最新 LTS（每次构建时安装当前最新版本）*****
-# 使用 n 在构建时获取最新 LTS；若需最新 Current 可改为 n latest
-RUN set -eux && \
-curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-   DEBIAN_FRONTEND=noninteractive apt update -qqy && \
-   DEBIAN_FRONTEND=noninteractive apt install -qqy nodejs && \
-   npm config set registry https://registry.npmmirror.com && \
-   npm install -g n && \
-   n lts && \
-   npm install -g wrangler && \
-   rm -rf /var/lib/apt/lists/* /tmp/*
-
-# ***** 安装 python3 版本 *****
-RUN set -eux && \
-    python3 -m pip config set global.break-system-packages true && \
-    pip3 config set global.index-url http://mirrors.aliyun.com/pypi/simple/ && \
-    pip3 config set install.trusted-host mirrors.aliyun.com && \
-    python3 -m pip install --no-cache-dir --ignore-installed setuptools wheel cython && \
-    python3 -m pip install --no-cache-dir pycryptodome lxml cython beautifulsoup4 requests && \
-    rm -rf /tmp/* /var/lib/apt/lists/*
-
-# ***** 安装golang *****
-RUN set -eux && \
-    # 映射 buildx TARGETARCH 到 Go 官方包名 (arm -> armv6l, 其他直接用)
-    case "${TARGETARCH}" in \
-        amd64)   GO_ARCH=amd64   ;; \
-        arm64)   GO_ARCH=arm64   ;; \
-        arm)     GO_ARCH=armv6l  ;; \
-        386)     GO_ARCH=386     ;; \
-        *)       echo "不支持的架构: ${TARGETARCH}" && exit 1 ;; \
-    esac && \
-    echo "目标架构: ${TARGETARCH} => Go 包: linux-${GO_ARCH}" && \
-    wget --no-check-certificate https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz \
-         -O /tmp/go-${GO_ARCH}.tar.gz && \
-    tar xzf /tmp/go-${GO_ARCH}.tar.gz -C /opt && \
-    mkdir -pv ${GOPATH}/bin && \
-    # 仅删除 Go 压缩包, 不清空整个 /tmp (避免误删 DOWNLOAD_SRC=/tmp/src)
-    rm -f /tmp/go-${GO_ARCH}.tar.gz && \
-    # 软链 go 到 /usr/bin, 后续 RUN 层无需配 PATH
-    ln -sf /opt/go/bin/* /usr/bin/ && \
-    go version
 
 # 自动检测服务是否可用
 HEALTHCHECK --interval=30s --timeout=3s CMD curl --fail http://localhost/ || exit 1
@@ -671,5 +423,6 @@ WORKDIR /data/nginx
 # ***** 容器信号处理 *****
 STOPSIGNAL SIGQUIT
 
-# ***** 启动命令 *****
+# ***** 启动命令(tini 作为 init, 优雅处理信号) *****
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["nginx", "-g", "daemon off;"]
