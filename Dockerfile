@@ -23,7 +23,7 @@ ARG NGINX_STICKY_MODULE_NG_VERSION=1.2.6
 # nginx-http-concat  https://github.com/alibaba/nginx-http-concat
 ARG NGINX_HTTP_CONCAT_VERSION=1.2.2
 # libcoraza (OWASP Coraza WAF C 库)  https://github.com/corazawaf/libcoraza
-ARG LIBCORAZA_VERSION=1.7.0
+ARG LIBCORAZA_VERSION=1.8.0
 # coraza-nginx (libcoraza 的 nginx 连接器)  https://github.com/corazawaf/coraza-nginx
 ARG CORAZA_NGINX_VERSION=0.21.0
 # OWASP Core Rule Set  https://github.com/coreruleset/coreruleset
