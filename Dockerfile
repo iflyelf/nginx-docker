@@ -25,7 +25,7 @@ ARG NGINX_HTTP_CONCAT_VERSION=1.2.2
 # libcoraza (OWASP Coraza WAF C 库)  https://github.com/corazawaf/libcoraza
 ARG LIBCORAZA_VERSION=1.8.0
 # coraza-nginx (libcoraza 的 nginx 连接器)  https://github.com/corazawaf/coraza-nginx
-ARG CORAZA_NGINX_VERSION=0.21.0
+ARG CORAZA_NGINX_VERSION=0.22.0
 # OWASP Core Rule Set  https://github.com/coreruleset/coreruleset
 ARG OWASP_CRS_VERSION=4.30.0
 # lua-resty-core  https://github.com/openresty/lua-resty-core
