@@ -9,7 +9,7 @@
 
 # ========================= 全局版本变量(两个阶段共享) =========================
 # nginx  https://github.com/nginx/nginx
-ARG NGINX_VERSION=1.31.6
+ARG NGINX_VERSION=1.31.7
 # QuicTLS OpenSSL (带 QUIC 支持, HTTP/3 必需)  https://github.com/quictls/openssl
 ARG OPENSSL_QUIC_VERSION=openssl-3.3.0-quic1
 # luajit2  https://github.com/openresty/luajit2
