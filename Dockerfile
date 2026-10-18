@@ -49,7 +49,7 @@ ARG OPENRESTY_SHELL_VERSION=0.03
 # lua-resty-upstream-healthcheck  https://github.com/openresty/lua-resty-upstream-healthcheck
 ARG OPENRESTY_HEALTHCHECK_VERSION=0.10
 # lua-resty-websocket  https://github.com/openresty/lua-resty-websocket
-ARG OPENRESTY_WEBSOCKET_VERSION=0.14
+ARG OPENRESTY_WEBSOCKET_VERSION=0.15
 # lua-upstream-nginx-module  https://github.com/openresty/lua-upstream-nginx-module
 ARG LUA_UPSTREAM_VERSION=0.08
 # nginx-lua-prometheus  https://github.com/knyar/nginx-lua-prometheus
