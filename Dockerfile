@@ -37,7 +37,7 @@ ARG OPENRESTY_HEADERS_VERSION=0.40
 # lua-resty-cookie  https://github.com/cloudflare/lua-resty-cookie
 ARG CLOUDFLARE_COOKIE_VERSION=0.1.0
 # lua-resty-dns  https://github.com/openresty/lua-resty-dns
-ARG OPENRESTY_DNS_VERSION=0.23
+ARG OPENRESTY_DNS_VERSION=0.24
 # lua-resty-memcached  https://github.com/openresty/lua-resty-memcached
 ARG OPENRESTY_MEMCACHED_VERSION=0.18
 # lua-resty-mysql  https://github.com/openresty/lua-resty-mysql
@@ -49,7 +49,7 @@ ARG OPENRESTY_SHELL_VERSION=0.03
 # lua-resty-upstream-healthcheck  https://github.com/openresty/lua-resty-upstream-healthcheck
 ARG OPENRESTY_HEALTHCHECK_VERSION=0.10
 # lua-resty-websocket  https://github.com/openresty/lua-resty-websocket
-ARG OPENRESTY_WEBSOCKET_VERSION=0.15
+ARG OPENRESTY_WEBSOCKET_VERSION=0.16
 # lua-upstream-nginx-module  https://github.com/openresty/lua-upstream-nginx-module
 ARG LUA_UPSTREAM_VERSION=0.08
 # nginx-lua-prometheus  https://github.com/knyar/nginx-lua-prometheus
