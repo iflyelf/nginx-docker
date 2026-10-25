@@ -33,7 +33,7 @@ ARG LUA_RESTY_CORE_VERSION=0.1.34rc3
 # lua-resty-lrucache  https://github.com/openresty/lua-resty-lrucache
 ARG LUA_RESTY_LRUCACHE_VERSION=0.15
 # headers-more-nginx-module  https://github.com/openresty/headers-more-nginx-module
-ARG OPENRESTY_HEADERS_VERSION=0.40
+ARG OPENRESTY_HEADERS_VERSION=0.41
 # lua-resty-cookie  https://github.com/cloudflare/lua-resty-cookie
 ARG CLOUDFLARE_COOKIE_VERSION=0.1.0
 # lua-resty-dns  https://github.com/openresty/lua-resty-dns
