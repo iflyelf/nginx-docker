@@ -9,7 +9,7 @@
 
 # ========================= 全局版本变量(两个阶段共享) =========================
 # nginx  https://github.com/nginx/nginx
-ARG NGINX_VERSION=1.31.9
+ARG NGINX_VERSION=1.31.10
 # QuicTLS OpenSSL (带 QUIC 支持, HTTP/3 必需)  https://github.com/quictls/openssl
 ARG OPENSSL_QUIC_VERSION=openssl-3.3.0-quic1
 # luajit2  https://github.com/openresty/luajit2
@@ -27,7 +27,7 @@ ARG LIBCORAZA_VERSION=1.8.1
 # coraza-nginx (libcoraza 的 nginx 连接器)  https://github.com/corazawaf/coraza-nginx
 ARG CORAZA_NGINX_VERSION=0.23.0
 # OWASP Core Rule Set  https://github.com/coreruleset/coreruleset
-ARG OWASP_CRS_VERSION=4.30.0
+ARG OWASP_CRS_VERSION=4.31.0
 # lua-resty-core  https://github.com/openresty/lua-resty-core
 ARG LUA_RESTY_CORE_VERSION=0.1.34rc3
 # lua-resty-lrucache  https://github.com/openresty/lua-resty-lrucache
